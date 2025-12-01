@@ -1,0 +1,91 @@
+{{- if .Values.rollout.enabled }}
+{{- if eq .Values.rollout.strategy "blueGreen" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "controle-estoque.fullname" . }}-active
+  labels:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    helm.sh/chart: {{ include "controle-estoque.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "controle-estoque.fullname" . }}-preview
+  labels:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    helm.sh/chart: {{ include "controle-estoque.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- else if eq .Values.rollout.strategy "canary" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "controle-estoque.fullname" . }}-stable
+  labels:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    helm.sh/chart: {{ include "controle-estoque.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "controle-estoque.fullname" . }}-canary
+  labels:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    helm.sh/chart: {{ include "controle-estoque.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+{{- end }}

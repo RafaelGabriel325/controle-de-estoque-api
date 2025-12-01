@@ -59,3 +59,28 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Argo Rollouts configuration
+rollout:
+  enabled: false
+  # strategy can be "blueGreen" or "canary"
+  strategy: ""
+  blueGreen:
+    # For dev: keep manual promotion (autoPromotionEnabled: false)
+    autoPromotionEnabled: false
+    # Optional delay before auto-promotion if enabled
+    autoPromotionSeconds: 0
+  canary:
+    # Example steps; can be overridden per env
+    steps:
+      - setWeight: 20
+      - pause:
+          duration: 60
+      - setWeight: 50
+      - pause:
+          duration: 60
+    trafficRouting:
+      nginx:
+        # Must match the Ingress.metadata.name to allow weight management
+        stableIngress: ""
+    analysis: {}

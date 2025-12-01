@@ -1,3 +1,4 @@
+{{- if not .Values.rollout.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -19,3 +20,4 @@ spec:
   selector:
     app.kubernetes.io/name: {{ include "controle-estoque.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

@@ -1,6 +1,6 @@
-{{- if not .Values.rollout.enabled }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "controle-estoque.fullname" . }}
   labels:
@@ -69,4 +69,24 @@ spec:
             failureThreshold: 6
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+  {{- if eq .Values.rollout.strategy "blueGreen" }}
+  strategy:
+    blueGreen:
+      activeService: {{ include "controle-estoque.fullname" . }}-active
+      previewService: {{ include "controle-estoque.fullname" . }}-preview
+      autoPromotionEnabled: {{ .Values.rollout.blueGreen.autoPromotionEnabled }}
+      {{- if .Values.rollout.blueGreen.autoPromotionSeconds }}
+      autoPromotionSeconds: {{ .Values.rollout.blueGreen.autoPromotionSeconds }}
+      {{- end }}
+  {{- else if eq .Values.rollout.strategy "canary" }}
+  strategy:
+    canary:
+      canaryService: {{ include "controle-estoque.fullname" . }}-canary
+      stableService: {{ include "controle-estoque.fullname" . }}-stable
+      trafficRouting:
+        nginx:
+          stableIngress: {{ default (include "controle-estoque.fullname" .) .Values.rollout.canary.trafficRouting.nginx.stableIngress | quote }}
+      steps:
+        {{- toYaml .Values.rollout.canary.steps | nindent 8 }}
+  {{- end }}
 {{- end }}

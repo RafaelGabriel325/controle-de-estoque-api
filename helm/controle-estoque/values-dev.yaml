@@ -31,3 +31,9 @@ postgres:
 
 ingress:
   enabled: false
+
+rollout:
+  enabled: true
+  strategy: "blueGreen"
+  blueGreen:
+    autoPromotionEnabled: false

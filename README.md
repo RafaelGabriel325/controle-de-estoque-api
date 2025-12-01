@@ -225,3 +225,90 @@ Observações técnicas:
 - O `docker-compose.yml` injeta variáveis para o container da API, incluindo `SPRING_DATASOURCE_*`, `JWT_SECRET`, `CORS_ORIGINS` e `SPRING_PROFILES_ACTIVE`.
 - O `application.yml` foi ajustado para ler as variáveis de ambiente e possui valores default seguros para desenvolvimento.
 - Em Kubernetes/Helm as variáveis são gerenciadas via `values*.yaml` e `Secret`; os arquivos `.env` são apenas para ambiente local com Docker Compose.
+
+
+## Implantação com Argo CD e Argo Rollouts (BlueGreen em Dev, Canary em Prod)
+Este repositório já contém manifests GitOps para instalar o Argo Rollouts no cluster e configurar a aplicação para realizar deploys progressivos:
+
+- Instalação do Argo Rollouts via Argo CD: `argocd-gitops/apps/argo-rollouts.yaml` (CRDs + controller + dashboard)
+- Dev (namespace `dev`): estratégia BlueGreen com promoção manual (autoPromotion desabilitada)
+- Prod (namespace `prod`): estratégia Canary com roteamento de tráfego via NGINX Ingress
+
+### Pré-requisitos
+- Argo CD instalado e acessível no namespace `argocd`.
+- NGINX Ingress Controller instalado (para canary em produção).
+
+### Bootstrapping com Argo CD
+1. Aplique a aplicação raiz (App of Apps):
+   ```bash
+   kubectl apply -n argocd -f argocd-gitops/root-application.yaml
+   ```
+2. No Argo CD, sincronize a app raiz, o que criará:
+   - `argocd-gitops/apps/argo-rollouts.yaml` (instala o Argo Rollouts)
+   - `argocd-gitops/apps/app-dev.yaml` (aponta para este chart com `values-dev.yaml`)
+   - `argocd-gitops/apps/app-prod.yaml` (aponta para este chart com `values-prod.yaml`)
+
+### Como a chart Helm foi adaptada para Argo Rollouts
+- Quando `rollout.enabled=true` (ver `values-*.yaml`), o `Deployment` padrão é suprimido e um recurso `Rollout` é criado (templates/rollout.yaml).
+- Para BlueGreen (dev):
+  - São criados services `-active` e `-preview` (templates/services-rollout.yaml).
+  - O Ingress (se habilitado) aponta para `-active`.
+  - `autoPromotionEnabled=false` por padrão em `values-dev.yaml`, exigindo promoção manual.
+- Para Canary (prod):
+  - São criados services `-stable` e `-canary` (templates/services-rollout.yaml).
+  - O Ingress aponta para `-stable` e o Argo Rollouts controla os pesos via anotações do NGINX (stableIngress).
+  - Exemplo de `steps` configurado em `values-prod.yaml`.
+- O HPA (se habilitado) aponta para `Rollout` quando `rollout.enabled=true`.
+
+### Instalando/Rodando o Dashboard do Argo Rollouts
+O app `argo-rollouts` já habilita o Dashboard. Para acesso rápido via port-forward:
+```bash
+kubectl -n argo-rollouts port-forward svc/argo-rollouts-dashboard 3100:3100
+```
+Abra http://localhost:3100
+
+### Fluxo BlueGreen em Dev: promoção manual
+1. Faça uma alteração de versão (ou rode um deploy que mude a imagem) em `dev`.
+2. Observe no Dashboard ou CLI que um novo ReplicaSet é criado e fica como `Preview`.
+3. Teste o serviço `-preview` (se exposto).
+4. Promova manualmente quando estiver tudo ok:
+   ```bash
+   # Verifique o nome do Rollout
+   kubectl -n dev get rollouts
+
+   # Promove a versão (switch de preview para active)
+   kubectl -n dev argo rollouts promote <nome-do-rollout>
+   ```
+5. Se quiser abortar/reverter antes da promoção:
+   ```bash
+   kubectl -n dev argo rollouts abort <nome-do-rollout>
+   ```
+
+### Fluxo Canary em Prod: ajuste de tráfego
+1. Em produção, o Ingress class é `nginx` e o Rollout está configurado com `trafficRouting.nginx`.
+2. Durante a demo, é possível ajustar manualmente o peso do tráfego da canary:
+   ```bash
+   # Verifique o nome do Rollout
+   kubectl -n prod get rollouts
+
+   # Ajuste o peso para 20%
+   kubectl -n prod argo rollouts set-weight <nome-do-rollout> 20
+
+   # Ajuste para 50%
+   kubectl -n prod argo rollouts set-weight <nome-do-rollout> 50
+
+   # Retornar o tráfego para 0% ou finalizar a promoção
+   kubectl -n prod argo rollouts set-weight <nome-do-rollout> 0
+   # ou
+   kubectl -n prod argo rollouts promote <nome-do-rollout>
+   ```
+3. Também é possível pausar e retomar:
+   ```bash
+   kubectl -n prod argo rollouts pause <nome-do-rollout>
+   kubectl -n prod argo rollouts resume <nome-do-rollout>
+   ```
+
+### Notas importantes
+- Certifique-se de ter o plugin/CLI `kubectl-argo-rollouts` instalado para usar os comandos `kubectl argo rollouts ...`.
+- Para Canary com NGINX, o nome do Ingress está definido pelo chart como `{{ include "controle-estoque.fullname" . }}`; você pode sobrepor em `values-prod.yaml` via `rollout.canary.trafficRouting.nginx.stableIngress` caso necessário.
+- Se você não deseja usar Argo Rollouts em algum ambiente, defina `rollout.enabled=false` e o chart voltará a usar `Deployment` e `Service` únicos.

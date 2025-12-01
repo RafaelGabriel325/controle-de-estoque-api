@@ -39,3 +39,19 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+rollout:
+  enabled: true
+  strategy: "canary"
+  canary:
+    steps:
+      - setWeight: 20
+      - pause:
+          duration: 60
+      - setWeight: 50
+      - pause:
+          duration: 60
+    trafficRouting:
+      nginx:
+        # If empty, the chart will default to the Ingress name ({{ include "controle-estoque.fullname" . }})
+        stableIngress: ""

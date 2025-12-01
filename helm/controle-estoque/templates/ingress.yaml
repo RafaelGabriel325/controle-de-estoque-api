@@ -24,7 +24,13 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
+                {{- if and $.Values.rollout.enabled (eq $.Values.rollout.strategy "blueGreen") }}
+                name: {{ include "controle-estoque.fullname" $ }}-active
+                {{- else if and $.Values.rollout.enabled (eq $.Values.rollout.strategy "canary") }}
+                name: {{ include "controle-estoque.fullname" $ }}-stable
+                {{- else }}
                 name: {{ include "controle-estoque.fullname" $ }}
+                {{- end }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
